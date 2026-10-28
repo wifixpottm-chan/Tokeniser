@@ -6,7 +6,7 @@ state.
 """
 
 from token_viewer.controller import Controller
-from token_viewer.fake_controller import FakeController
+from token_viewer.real_controller import RealController
 
 
 def build_controller() -> Controller:
@@ -16,4 +16,4 @@ def build_controller() -> Controller:
     # here.
     # Yours: replace FakeController() with your own controller, built on your
     # model, both in modules of your own in this package.
-    return FakeController()
+    return RealController()

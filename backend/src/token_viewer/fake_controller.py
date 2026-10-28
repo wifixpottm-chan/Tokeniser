@@ -189,8 +189,16 @@ class FakeController(Controller):
         capture: CaptureView | None = None
         if model.capture_name is not None:
             capture = CaptureView(
-                name=model.capture_name, answer=model.capture_answer, reasoning=None
-            )
+            name=model.capture_name,
+            answer=model.capture_answer,
+            reasoning=None,
+            requested_model=None,
+            reported_model=None,
+            status_code=None,
+            finish_reason=None,
+            usage=None,
+            elapsed_seconds=None,
+        )
         return ViewModel(
             tokenizer=TokenizerView(
                 repository=model.repository, revision=model.revision

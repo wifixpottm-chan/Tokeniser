@@ -111,21 +111,36 @@ class ViewOption(BaseModel):
 
 
 class CaptureView(BaseModel):
-    """A captured provider response.
-
-    A first version with the two texts only. Add the response metadata the
-    task asks for.
-    """
+    """A captured provider response and its metadata."""
 
     model_config = ConfigDict(use_attribute_docstrings=True)
 
     name: str
     """The capture file's name."""
+
     answer: str | None
     """The answer text, or None if the response has none."""
+
     reasoning: str | None
     """The reasoning text, or None if the response has none."""
-    # Yours: the response metadata that "4. Captures" on the task sheet lists.
+
+    requested_model: str | None
+    """The model name requested from the provider."""
+
+    reported_model: str | None
+    """The model name reported by the provider."""
+
+    status_code: int | None
+    """The provider's HTTP status code."""
+
+    finish_reason: str | None
+    """Why the provider stopped generating."""
+
+    usage: dict[str, object] | None
+    """Token usage reported by the provider."""
+
+    elapsed_seconds: float | None
+    """Elapsed time reported or measured by the capture."""
 
 
 class ViewModel(BaseModel):
