@@ -55,7 +55,29 @@ flowchart LR
 
 Vite's proxy passes every request under `/api` on to uvicorn, so the page and the API share one origin and need no CORS.
 
-_Yours: complete the map and explain it._ Where do the model's files come from, and when? Where does the terminal view run? Which process holds the state, and what happens to it when uvicorn restarts? Which process does each debugger attach to?
+The tokenizer files come from the selected Hugging Face repository. The
+backend downloads `tokenizer.json` and `chat_template.jinja` when the user
+runs `load_model`; importing the backend does not download them. The files are
+cached locally, so later runs can reuse them.
+
+The browser page runs in the browser process. Vite runs as a separate Node.js
+process on port 5173 and proxies `/api` requests to uvicorn on port 8000.
+Uvicorn runs the FastAPI application, controller and model in one Python
+process.
+
+The terminal view runs as its own Python process when `uv run token-viewer` is
+started. It creates its own `RealController` and `TokenViewerModel`; it does
+not share state with the browser backend process.
+
+The model state is held in memory by the Python process running uvicorn. It
+contains the loaded tokenizer, messages, tokenized views, current view,
+selection and capture. Restarting uvicorn creates a new controller and model,
+so the in-memory state is reset.
+
+The browser debugger attaches to the browser or frontend process, while the
+Python debugger attaches to the uvicorn process. A breakpoint in the browser
+stops the TypeScript/frontend side; a breakpoint in `api.py`,
+`real_controller.py` or `model.py` stops the Python backend side.
 
 ## 3. Debugging
 
@@ -63,29 +85,105 @@ Stop the back end from section 1 by closing its terminal (**Kill Terminal**) or 
 
 Starter: [GUIDE.md](GUIDE.md#debugging) shows where the first breakpoints go and what **Call Stack**, **Variables** and **Network** show there.
 
-_Yours: your breakpoints in the model, where the chat template is rendered and where the text is encoded, and what **Variables** shows there._
+Useful breakpoints are:
+
+- `TokenViewerModel.load_model()`, after the tokenizer and chat-template files
+  have been loaded.
+- `TokenViewerModel.set_messages()`, at the call to
+  `environment.from_string(chat_template).render(...)`, to inspect the
+  messages, template and generated chat text.
+- `TokenViewerModel._make_tokens()`, at the call to
+  `tokenizer.encode(...)`, to inspect the text before it becomes token IDs.
+- `RealController.view_model()`, to inspect the conversion from model objects
+  into `TokenView`, `ViewOption` and `ViewModel`.
+
+At the model breakpoint, Variables shows the selected repository, revision,
+messages, tokenizer state, chat-template text, views and selected token. At
+the controller breakpoint, Variables shows the model tokens being converted
+into the public view-model returned to the page. No provider API key is needed
+for the token viewer.
 
 If your code ever reads a key or a Hugging Face token, collapse **Variables** before you share your screen.
 
 ## 4. What works
 
-_Yours: what works, in the order of the task sheet, and the steps that show it._
+The project works in the required order:
+
+1. The terminal view loads the pinned Hugging Face tokenizer and chat
+   template.
+2. The course request is tokenized as text alone and after the chat template.
+   The text-only view has 8 tokens and the chat view has 24 tokens.
+3. The browser page uses the same `RealController` and model as the terminal
+   view. It shows the chat, text-only and selected-token views.
+4. A capture written by `capture-nvidia-response` can be loaded locally. The
+   page shows the provider answer, reasoning when present, response metadata
+   and the answer re-tokenized with the local tokenizer.
+5. The terminal view and browser page are separate views using the same model
+   and controller design.
 
 ## 5. Architecture
 
 | Role | In this repository | May not |
 |---|---|---|
-| Model | _yours_ | import a view, a UI library or a web framework such as FastAPI |
+| Model | `TokenViewerModel` in `model.py` | import a view, a UI library or a web framework such as FastAPI |
 | Controller | the interface in `controller.py` and your class; `wiring.py` chooses it | render anything (HTML, terminal output) |
 | View | the page in `frontend/` with its routes in `api.py`; your terminal view | import the tokenizer libraries, contain domain logic |
 
 Starter: [GUIDE.md](GUIDE.md#the-contract) explains the contract between the view-models and the page, and the two meanings of model and view.
 
-_Yours: your view-model, where the state lives, and the change that put the page on your controller: `wiring.py` only, with no change to the model or the controller._
+The model is `TokenViewerModel` in
+`backend/src/token_viewer/model.py`. It owns the loaded tokenizer and chat
+template, the current messages, tokenized views, selected token and capture
+data. It does not import FastAPI or frontend code.
+
+The controller is `RealController` in
+`backend/src/token_viewer/real_controller.py`. It calls model operations,
+translates expected `ModelError` exceptions into `CommandError`, and converts
+internal model objects such as `ModelToken` into public view-model objects such
+as `TokenView`.
+
+The view-model classes in `view_models.py` are the data contract sent to the
+browser and terminal view. `ViewModel` contains the current text, tokens,
+available views, selected token, tokenizer information and capture data.
+
+The browser uses FastAPI routes in `api.py`, while the terminal view calls
+`RealController` directly. Both use the same model/controller design.
+
+The page was connected to the real implementation by changing only
+`wiring.py` so that `build_controller()` returns `RealController()` instead of
+`FakeController()`. The model, controller interface and frontend did not need
+to be changed for that connection. The fake controller remains for fast,
+offline route tests.
 
 ## 6. Decisions
 
-_Yours: short records of your decisions and their reasons: which files and which revision, which libraries, and where your design departs from textbook MVC._
+We use the pinned revision
+`bee7596271d1495f6992ae224aefde4410e816b8` of
+`nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4`. Pinning the revision
+makes the tokenizer files and token IDs reproducible.
+
+The model downloads `tokenizer.json` and `chat_template.jinja` from Hugging
+Face. We use `huggingface-hub` for downloading, `tokenizers` for encoding
+text, and sandboxed Jinja for rendering the downloaded chat template. The
+large model weights are not needed because this project only tokenizes text
+and does not generate model output.
+
+The chat-template switch `enable_thinking=False` is currently an application
+choice made when rendering the chat template. It is not exposed as a separate
+user command or view-model field because the required course request uses one
+fixed setting.
+
+Token offsets use Python string character positions. `start` is inclusive and
+`end` is exclusive, so a displayed range can be obtained with
+`text[start:end]`. Byte-level tokenization can produce overlapping offsets for
+Unicode characters such as emoji.
+
+Capture metadata is separated conceptually into provider data and local
+reconstruction. The status, reported model, finish reason, usage and elapsed
+time come from the capture. The answer and reasoning are provider-returned
+text, but their token views are reconstructed locally by applying the selected
+tokenizer again. The locally re-tokenized answer is labelled accordingly and
+is not claimed to be the provider's original completion token stream.
 
 Starter: three questions are left open on purpose. Decide them, and record what you chose and why:
 
