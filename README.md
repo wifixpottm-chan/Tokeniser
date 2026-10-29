@@ -87,15 +87,7 @@ Starter: [GUIDE.md](GUIDE.md#debugging) shows where the first breakpoints go and
 
 Useful breakpoints are:
 
-- `TokenViewerModel.load_model()`, after the tokenizer and chat-template files
-  have been loaded.
-- `TokenViewerModel.set_messages()`, at the call to
-  `environment.from_string(chat_template).render(...)`, to inspect the
-  messages, template and generated chat text.
-- `TokenViewerModel._make_tokens()`, at the call to
-  `tokenizer.encode(...)`, to inspect the text before it becomes token IDs.
-- `RealController.view_model()`, to inspect the conversion from model objects
-  into `TokenView`, `ViewOption` and `ViewModel`.
+select anad select_view in api.py, select_token in model and controller
 
 At the model breakpoint, Variables shows the selected repository, revision,
 messages, tokenizer state, chat-template text, views and selected token. At
